@@ -1,5 +1,8 @@
 package ast
 
+import kotlin.system.exitProcess
+import kotlin.text.Regex
+
 enum class TokenType {
     AS,
     BREAK,
@@ -62,6 +65,8 @@ enum class TokenType {
     RANGE_PATH,
     CONTROL,
     DELIMITER,
+
+    INVALID,
 }
 
 val tokenPatterns: List<Pair<Regex, TokenType>> = listOf(
@@ -129,23 +134,32 @@ val tokenPatterns: List<Pair<Regex, TokenType>> = listOf(
         """^[{}\[\]()]"""
     ) to TokenType.DELIMITER,
     Regex(
-        """^(?:[0-9](?:[0-9_]*[0-9])?|0b[01](?:[01_]*[01])?|0o[0-7]
-        |(?:[0-7_]*[0-7])?|0x[0-9a-fA-F](?:[0-9a-fA-F_]*[0-9a-fA-F])?)
-        |(?:[iu](?:32|size))?$""".trimMargin()
+        """^(
+        |0x[0-9a-fA-F](?:[0-9a-fA-F_]*[0-9a-fA-F])?|
+        |0b[01](?:[01_]*[01])?|
+        |0o[0-7](?:[0-7_]*[0-7])?|
+        |[0-9](?:[0-9_]*[0-9])?|
+        )([iu](?:32|size))?"""
+            .trimMargin()
+            .replace("\n", "")
     ) to TokenType.INTEGER_LITERAL,
     Regex(
-        """^'(?:[^'\\\n\r\t]|\\['"\\nrt0]|\\x[0-7][0-9a-fA-F]|\\u\{[0-9a-fA-F_]{1,6}})'
-        |(?:[iu](?:8|16|32|64|128|size))?$""".trimMargin()
+        """^'(?:[^'\\\n\t]|\\['"\\nrt0]|\\x[0-7][0-9a-fA-F]|\\u\{[0-9a-fA-F_]{1,6}})'(
+            |?:[iu](?:8|16|32|64|128|size))?""".trimMargin()
     ) to TokenType.CHAR_LITERAL,
     Regex(
-        """^"(?:[^"\\\r\n]|\\[nrt0\\"]|\\x[0-7][0-9a-fA-F]|\\u\{[0-9a-fA-F_]{1,6}}|\\\n)*"
-        |(?:[iu](8|16|32|64|128|size))?$""".trimMargin()
+        """^"(?:[^"\\\n]|\\[nrt0\\"]|\\x[0-7][0-9a-fA-F]|\\u\{[0-9a-fA-F_]{1,6}}|\\\n)*"|(
+            |?:[iu](8|16|32|64|128|size))?""".trimMargin()
     ) to TokenType.STRING_LITERAL,
 )
 
 
 data class Token(val type: TokenType, val value: String) {
     fun printToken() {
-        print("type = $type , value = $value")
+        if (type == TokenType.INVALID) {
+            println("invalid token : $value")
+            exitProcess(1)
+        }
+        println("type = $type , value = $value")
     }
 }
