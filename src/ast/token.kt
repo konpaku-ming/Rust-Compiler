@@ -135,24 +135,21 @@ val tokenPatterns: List<Pair<Regex, TokenType>> = listOf(
     ) to TokenType.DELIMITER,
     Regex(
         """^(
-        |0x[0-9a-fA-F](?:[0-9a-fA-F_]*[0-9a-fA-F])?|
-        |0b[01](?:[01_]*[01])?|
-        |0o[0-7](?:[0-7_]*[0-7])?|
-        |[0-9](?:[0-9_]*[0-9])?|
+        |0x[0-9a-fA-F_]*[0-9a-fA-F][0-9a-fA-F_]*|
+        |0b[01_]*[01][01_]*|
+        |0o[0-7_]*[0-7][0-7_]*|
+        |[0-9][0-9_]*|
         )([iu](?:32|size))?"""
             .trimMargin()
             .replace("\n", "")
     ) to TokenType.INTEGER_LITERAL,
     Regex(
-        """^'(?:[^'\\\n\t]|\\['"\\nrt0]|\\x[0-7][0-9a-fA-F]|\\u\{[0-9a-fA-F_]{1,6}})'(
-            |?:[iu](?:8|16|32|64|128|size))?""".trimMargin()
+        """^'([^'\\\n\r\t]|\\[nrt'"\\0]|\\x[0-7][0-9a-fA-F])'"""
     ) to TokenType.CHAR_LITERAL,
     Regex(
-        """^"(?:[^"\\\n]|\\[nrt0\\"]|\\x[0-7][0-9a-fA-F]|\\u\{[0-9a-fA-F_]{1,6}}|\\\n)*"|(
-            |?:[iu](8|16|32|64|128|size))?""".trimMargin()
+        """^"([^"\\\r]|\\[nrt'"\\0]|\\x[0-9a-fA-F]{2}|\\\r)*""""
     ) to TokenType.STRING_LITERAL,
 )
-
 
 data class Token(val type: TokenType, val value: String) {
     fun printToken() {
