@@ -5,6 +5,6 @@ fun removeComments(code: String): String {
     val code1 = code.replace(multiLine, " ")
     val singleLine = Regex("//.*")
     val code2 = code1.replace(singleLine, " ")
-    val code3 = code2.replace("\n", " ")
-    return code3
+    //val code3 = code2.replace("\n", " ")
+    return code2
 }

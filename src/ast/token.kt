@@ -61,10 +61,56 @@ enum class TokenType {
     INTEGER_LITERAL,
     CHAR_LITERAL,
     STRING_LITERAL,
-    OPERATOR,
-    RANGE_PATH,
-    CONTROL,
-    DELIMITER,
+    RAW_STRING_LITERAL,
+    C_STRING_LITERAL,
+    C_RAW_STRING_LITERAL,
+
+    Assign,
+    AddAssign,
+    SubAssign,
+    MulAssign,
+    DivAssign,
+    ModAssign,
+    ShlAssign,
+    ShrAssign,
+    AndAssign,
+    OrAssign,
+    XorAssign,
+
+    Add, SubNegate, Mul,
+    Div, Mod,
+    Shl, Shr,
+    BitAnd, BitOr, BitXor,
+    And, Or,
+    Eq, Neq, Lt,
+    Gt, Le, Ge,
+
+    Not, BitNot,
+
+    Ellipsis,
+    RangeInclusive,
+    Range,
+    Dot,
+    DoubleColon,
+    Arrow,
+    BackArrow,
+    FatArrow,
+
+    Comma,
+    Semicolon,
+    Colon,
+    QuestionMark,
+    At,
+    Hash,
+    Underscore,
+    Dollar,
+
+    LeftBrace,
+    RightBrace,
+    LeftBracket,
+    RightBracket,
+    LeftParen,
+    RightParen,
 
     INVALID,
 }
@@ -124,15 +170,64 @@ val tokenPatterns: List<Pair<Regex, TokenType>> = listOf(
     Regex("^gen") to TokenType.GEN,
 
     Regex("^[a-zA-Z][a-zA-Z0-9_]*") to TokenType.IDENTIFIER,
-    Regex(
-        """^(?:>>=|<<=|\+=|-=|\*=|/=|%=|\^=|&=|\|=|==|!=|<=|>=|
-        |<<|>>|&&|\|\||=|\+|-|\*|/|%|\^|!|~|&|\||<|>)""".trimMargin()
-    ) to TokenType.OPERATOR,
-    Regex("""^(?:\.\.\.|\.{2}=|\.\.|\.|::|->|<-|=>)""") to TokenType.RANGE_PATH,
-    Regex("""^[,;:?@#_$]""") to TokenType.CONTROL,
-    Regex(
-        """^[{}\[\]()]"""
-    ) to TokenType.DELIMITER,
+
+    Regex("^>>=") to TokenType.ShrAssign,
+    Regex("^<<=") to TokenType.ShlAssign,
+    Regex("""^\+=""") to TokenType.AddAssign,
+    Regex("^-=") to TokenType.SubAssign,
+    Regex("""^\*=""") to TokenType.MulAssign,
+    Regex("^/=") to TokenType.DivAssign,
+    Regex("^%=") to TokenType.ModAssign,
+    Regex("""^\^=""") to TokenType.XorAssign,
+    Regex("^&=") to TokenType.AndAssign,
+    Regex("""^\|=""") to TokenType.OrAssign,
+    Regex("""^==""") to TokenType.Eq,
+    Regex("""^!=""") to TokenType.Neq,
+    Regex("""^<=""") to TokenType.Le,
+    Regex("""^>=""") to TokenType.Ge,
+    Regex("""^<<""") to TokenType.Shl,
+    Regex("""^>>""") to TokenType.Shr,
+    Regex("""^&&""") to TokenType.And,
+    Regex("""^\|\|""") to TokenType.Or,
+    Regex("""^=""") to TokenType.Assign,
+    Regex("""^\+""") to TokenType.Add,
+    Regex("""^-""") to TokenType.SubNegate,
+    Regex("""^\*""") to TokenType.Mul,
+    Regex("""^/""") to TokenType.Div,
+    Regex("""^%""") to TokenType.Mod,
+    Regex("""^\^""") to TokenType.BitXor,
+    Regex("""^!""") to TokenType.Not,
+    Regex("""^~""") to TokenType.BitNot,
+    Regex("""^&""") to TokenType.BitAnd,
+    Regex("""^\|""") to TokenType.BitOr,
+    Regex("""^<""") to TokenType.Lt,
+    Regex("""^>""") to TokenType.Gt,
+
+    Regex("""^\.{3}""") to TokenType.Ellipsis,
+    Regex("""^\.{2}=""") to TokenType.RangeInclusive,
+    Regex("""^\.{2}""") to TokenType.Range,
+    Regex("""^\.""") to TokenType.Dot,
+    Regex("""^::""") to TokenType.DoubleColon,
+    Regex("""^->""") to TokenType.Arrow,
+    Regex("""^<-""") to TokenType.BackArrow,
+    Regex("""^=>""") to TokenType.FatArrow,
+
+    Regex("""^,""") to TokenType.Comma,
+    Regex("""^;""") to TokenType.Semicolon,
+    Regex("""^:""") to TokenType.Colon,
+    Regex("""^\?""") to TokenType.QuestionMark,
+    Regex("""^@""") to TokenType.At,
+    Regex("""^#""") to TokenType.Hash,
+    Regex("""^_""") to TokenType.Underscore,
+    Regex("""^$""") to TokenType.Dollar,
+
+    Regex("""^\{""") to TokenType.LeftBrace,
+    Regex("""^}""") to TokenType.RightBrace,
+    Regex("""^\[""") to TokenType.LeftBracket,
+    Regex("""^]""") to TokenType.RightBracket,
+    Regex("""^\(""") to TokenType.LeftParen,
+    Regex("""^\)""") to TokenType.RightParen,
+
     Regex(
         """^(
         |0x[0-9a-fA-F_]*[0-9a-fA-F][0-9a-fA-F_]*|
@@ -149,6 +244,15 @@ val tokenPatterns: List<Pair<Regex, TokenType>> = listOf(
     Regex(
         """^"([^"\\\r]|\\[nrt'"\\0]|\\x[0-9a-fA-F]{2}|\\\r)*""""
     ) to TokenType.STRING_LITERAL,
+    Regex(
+        """^r(#*)"([^"\\\r]|\\[nrt'"\\0]|\\x[0-9a-fA-F]{2}|\\\r)*"\1"""
+    ) to TokenType.RAW_STRING_LITERAL,
+    Regex(
+        """^c"([^"\\\r]|\\[nrt'"\\0]|\\x[0-9a-fA-F]{2}|\\\r)*""""
+    ) to TokenType.C_STRING_LITERAL,
+    Regex(
+        """^cr(#*)"([^"\\\r]|\\[nrt'"\\0]|\\x[0-9a-fA-F]{2}|\\\r)*"\1"""
+    ) to TokenType.C_RAW_STRING_LITERAL,
 )
 
 data class Token(val type: TokenType, val value: String) {
