@@ -35,6 +35,7 @@ class Lexer(input: String) {
             if (len == code.length) break
             else code = code.substring(len)
         }
+        vec.add(Token(TokenType.EOF, ""))
         return vec
     }
 }

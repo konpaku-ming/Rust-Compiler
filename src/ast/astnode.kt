@@ -1,6 +1,9 @@
 package ast
 
 enum class NodeType {
+    Crate,
+    FunctionItem, StructItem, EnumItem, ConstantItem, TraitItem, ImplItem,
+    EmptyStmt, ItemStmt, LetStmt, ExprStmt,
     PathInExpr, TypePath,
     ReferenceType, ArrayType, SliceType, InferredType,
     IntLiteralExpr, CharLiteralExpr, StringLiteralExpr, BooleanLiteralExpr,
@@ -20,15 +23,114 @@ sealed class ASTNode {
     abstract val type: NodeType //类型
 }
 
+data class CrateNode(
+    val items: List<ItemNode>
+) : ASTNode() {
+    override val type: NodeType = NodeType.Crate
+}
+
+
 sealed class StmtNode : ASTNode()
+
+data class EmptyStmtNode(
+    val semicolon: Token,
+) : StmtNode() {
+    override val type: NodeType = NodeType.EmptyStmt
+}
+
+sealed class ItemNode : ASTNode()
+
+sealed interface Param
+
+data class SelfParam(
+    val isMut: Boolean,
+    val isRef: Boolean,
+    val selfType: TypeNode?
+) : Param
+
+data class FunctionParam(
+    val paramName: Token,
+    val type: TypeNode
+) : Param
+
+data class FunctionItemNode(
+    val isConst: Boolean,
+    val fnName: Token,
+    val selfParam: SelfParam?,
+    val params: List<FunctionParam>,
+    val returnType: TypeNode?,
+    val body: BlockExprNode?
+) : ItemNode() {
+    override val type: NodeType = NodeType.FunctionItem
+}
+
+data class StructField(
+    val name: Token,
+    val type: TypeNode
+)
+
+data class StructItemNode(
+    val structName: Token,
+    val fields: List<StructField>?,
+) : ItemNode() {
+    override val type: NodeType = NodeType.StructItem
+}
+
+data class EnumItemNode(
+    val name: Token,
+    val variants: List<Token>
+) : ItemNode() {
+    override val type: NodeType = NodeType.EnumItem
+}
+
+data class ConstantItemNode(
+    val constantName: Token,
+    val constantType: TypeNode,
+    val value: ExprNode?
+) : ItemNode() {
+    override val type: NodeType = NodeType.ConstantItem
+}
+
+data class TraitItemNode(
+    val traitName: Token,
+    val items: List<ItemNode>
+) : ItemNode() {
+    override val type: NodeType = NodeType.TraitItem
+}
+
+data class ImplItemNode(
+    val implName: Token?,
+    val implType: TypeNode,
+    val items: List<ItemNode>
+) : ItemNode() {
+    override val type: NodeType = NodeType.ImplItem
+}
+
+data class ItemStmtNode(
+    val item: ItemNode,
+) : StmtNode() {
+    override val type: NodeType = NodeType.ItemStmt
+}
+
+data class LetStmtNode(
+    val pattern: PatternNode,
+    val valueType: TypeNode?,
+    val value: ExprNode?
+) : StmtNode() {
+    override val type: NodeType = NodeType.LetStmt
+}
+
+data class ExprStmtNode(
+    val expr: ExprNode,
+    val hasSemicolon: Boolean,
+) : StmtNode() {
+    override val type: NodeType = NodeType.ExprStmt
+}
+
 
 sealed class ExprNode : ASTNode()
 sealed class ExprWithoutBlockNode : ExprNode()
 sealed class ExprWithBlockNode : ExprNode()
-
-sealed class ItemNode : ASTNode()
-
-//TODO: more ItemNode
 
 data class PathSegment(
     val identSegment: Token,

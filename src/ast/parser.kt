@@ -125,6 +125,11 @@ class Parser(private val tokens: List<Token>) {
         else return tokens[position++]
     }
 
+    private fun ahead(offset: Int): Token {
+        if (position + offset >= tokenNum) error("expect token but found none")
+        else return tokens[position + offset]
+    }
+
     private fun match(type: TokenType, value: String? = null): Boolean {
         if (position >= tokenNum) error("expect token but found none")
         val cur = tokens[position]
@@ -132,6 +137,14 @@ class Parser(private val tokens: List<Token>) {
             position++
             return true
         } else return false
+    }
+
+    fun parse(): CrateNode {
+        val items = mutableListOf<ItemNode>()
+        while (position >= tokenNum || peek().type == TokenType.EOF) {
+            items.add(parseItem())
+        }
+        return CrateNode(items)
     }
 
     fun isExpr(): Boolean {
@@ -169,6 +182,29 @@ class Parser(private val tokens: List<Token>) {
         }
     }
 
+    fun isStmt(): Boolean {
+        return when (peek().type) {
+            TokenType.Semicolon,
+            TokenType.LET,
+            TokenType.FN,
+            TokenType.STRUCT,
+            TokenType.ENUM,
+            TokenType.TRAIT,
+            TokenType.IMPL -> true
+
+            TokenType.CONST -> {
+                when (ahead(1).type) {
+                    TokenType.FN -> true
+                    TokenType.IDENTIFIER -> true
+                    TokenType.LeftBrace -> false // 优先解释为Expr而不是ExprStmt
+                    else -> error("unexpected token after const")
+                }
+            }
+
+            else -> false
+        }
+    }
+
     fun parseExpr(precedence: Int): ExprNode {
         var left = parsePrefix()
         while (true) {
@@ -182,7 +218,6 @@ class Parser(private val tokens: List<Token>) {
 
     fun parsePrefix(): ExprNode {
         val token = peek()
-        // TODO
         return when (token.type) {
             TokenType.INTEGER_LITERAL,
             TokenType.CHAR_LITERAL,
@@ -225,7 +260,6 @@ class Parser(private val tokens: List<Token>) {
 
     fun parseInfix(left: ExprNode): ExprNode {
         val token = peek()
-        // TODO
         return when (token.type) {
             TokenType.Add -> parseInfixAdd(left, consume())
             TokenType.SubNegate -> parseInfixSub(left, consume())
@@ -274,9 +308,6 @@ class Parser(private val tokens: List<Token>) {
 
             else -> error("unexpected infix token")
         }
-    }
-
-    fun parseStmt(): StmtNode {
     }
 
     fun parsePathInExpr(): PathInExprNode {
@@ -395,8 +426,11 @@ class Parser(private val tokens: List<Token>) {
             } else {
                 val expr = parseExpr(0)
                 if (match(TokenType.Semicolon)) {
-                    statements.add(ExprStmtNode(expr))
+                    statements.add(ExprStmtNode(expr, true))
                 } else {
+                    if (expr is ExprWithBlockNode)
+                        statements.add(ExprStmtNode(expr, false))
+                    else error("unexpected block in BlockExpr")
                     expression = expr
                 }
             }
@@ -783,10 +817,10 @@ class Parser(private val tokens: List<Token>) {
             TokenType.SELF -> parsePathPattern()
             TokenType.SELF_CAP -> parsePathPattern()
             TokenType.IDENTIFIER -> {
-                when (tokens[position + 1].type) {
+                when (ahead(1).type) {
                     TokenType.At -> parseIdentifierPattern()
                     TokenType.DoubleColon -> parsePathPattern()
-                    else -> parseIdentifierPattern()
+                    else -> parsePathPattern()
                 }
             }
 
@@ -971,5 +1005,269 @@ class Parser(private val tokens: List<Token>) {
             arms.add(parseMatchArm())
         }
         return MatchExprNode(scrutinee, arms)
+    }
+
+    fun parseStmt(): StmtNode {
+        return when (peek().type) {
+            TokenType.Semicolon -> parseEmptyStmt(consume())
+            TokenType.LET -> parseLetStmt(consume())
+            TokenType.FN -> parseItemStmt()
+            TokenType.STRUCT -> parseItemStmt()
+            TokenType.ENUM -> parseItemStmt()
+            TokenType.CONST -> {
+                when (ahead(1).type) {
+                    TokenType.FN -> parseItemStmt()
+                    TokenType.IDENTIFIER -> parseItemStmt()
+                    TokenType.LeftBrace -> {
+                        val expr = parseConstBlockExpr(consume())
+                        val hasSemicolon = match(TokenType.Semicolon)
+                        ExprStmtNode(expr, hasSemicolon)
+                    }
+
+                    else -> error("unexpected token after const")
+                }
+            }
+
+            TokenType.TRAIT -> parseItemStmt()
+            TokenType.IMPL -> parseItemStmt()
+            else -> error("unexpected token in Stmt")
+        }
+    }
+
+    fun parseEmptyStmt(cur: Token): EmptyStmtNode {
+        if (cur.type != TokenType.Semicolon) error("expected ;")
+        return EmptyStmtNode(cur)
+    }
+
+    fun parseItemStmt(): ItemStmtNode {
+        val item = parseItem()
+        return ItemStmtNode(item)
+    }
+
+    fun parseLetStmt(cur: Token): LetStmtNode {
+        if (cur.type != TokenType.LET) error("expected let")
+        val pattern = parsePattern()
+        val valueType = if (match(TokenType.Colon)) {
+            parseType()
+        } else null
+        val value = if (match(TokenType.Assign)) {
+            parseExpr(0)
+        } else null
+        if (!match(TokenType.Semicolon)) error("expected ;")
+
+        return LetStmtNode(pattern, valueType, value)
+    }
+
+
+    fun parseItem(): ItemNode {
+        return when (peek().type) {
+            TokenType.FN -> parseFunctionItem()
+            TokenType.STRUCT -> parseStructItem()
+            TokenType.ENUM -> parseEnumItem()
+            TokenType.CONST -> {
+                if (ahead(1).type == TokenType.FN) parseFunctionItem()
+                else parseConstantItem()
+            }
+
+            TokenType.TRAIT -> parseTraitItem()
+            TokenType.IMPL -> parseImplItem()
+            else -> error("unexpected token in item")
+        }
+    }
+
+    fun parseFunctionItem(): FunctionItemNode {
+        val isConst = match(TokenType.CONST)
+        if (!match(TokenType.FN)) error("expected fn")
+        val fnName = consume()
+        if (fnName.type != TokenType.IDENTIFIER) error("expected id")
+        if (!match(TokenType.LeftParen)) error("expected (")
+        val (selfParam, params) = parseFunctionParameters()
+        if (!match(TokenType.RightParen)) error("expected )")
+        val returnType = if (match(TokenType.Arrow)) {
+            parseType()
+        } else null
+
+        if (peek().type == TokenType.LeftBrace) {
+            val body = parseBlockExpr(consume())
+            return FunctionItemNode(
+                isConst, fnName, selfParam,
+                params, returnType, body
+            )
+        } else {
+            if (!match(TokenType.Semicolon)) error("expected ;")
+            return FunctionItemNode(
+                isConst, fnName, selfParam,
+                params, returnType, null
+            )
+        }
+    }
+
+    fun parseFunctionParameters(): Pair<SelfParam?, List<FunctionParam>> {
+        val params = mutableListOf<FunctionParam>()
+        if (match(TokenType.RightParen)) return null to emptyList()
+        if (peek().type == TokenType.SELF ||
+            (peek().type == TokenType.BitAnd &&
+                    ahead(1).type == TokenType.SELF) ||
+            (peek().type == TokenType.MUT &&
+                    ahead(1).type == TokenType.SELF) ||
+            (peek().type == TokenType.BitAnd &&
+                    ahead(1).type == TokenType.MUT &&
+                    ahead(2).type == TokenType.SELF)
+        ) {
+            val selfParam = parseSelfParam()
+            if (match(TokenType.Comma)) {
+                if (peek().type == TokenType.RightParen) {
+                    return selfParam to emptyList()
+                } else {
+                    params.add(parseFunctionParam())
+                    while (match(TokenType.Comma)) {
+                        if (peek().type == TokenType.RightParen) break
+                        params.add(parseFunctionParam())
+                    }
+                    return selfParam to params
+                }
+            } else {
+                if (peek().type == TokenType.RightParen) {
+                    return selfParam to emptyList()
+                } else error("expected , or )")
+            }
+        } else {
+            params.add(parseFunctionParam())
+            while (match(TokenType.Comma)) {
+                if (peek().type == TokenType.RightParen) break
+                params.add(parseFunctionParam())
+            }
+            return null to params
+        }
+    }
+
+    fun parseSelfParam(): SelfParam {
+        val isRef = match(TokenType.BitAnd)
+        val isMut = match(TokenType.MUT)
+        var selfType: TypeNode? = null
+        if (!match(TokenType.SELF)) error("expected self")
+        if (match(TokenType.Colon)) {
+            if (isRef) error("unexpected :")
+            selfType = parseType()
+        }
+        return SelfParam(isMut, isRef, selfType)
+    }
+
+    fun parseFunctionParam(): FunctionParam {
+        val paramName = consume()
+        if (paramName.type != TokenType.IDENTIFIER) error("expected id")
+        if (!match(TokenType.Colon)) error("expected :")
+        val type = parseType()
+        return FunctionParam(paramName, type)
+    }
+
+    fun parseStructItem(): StructItemNode {
+        if (!match(TokenType.STRUCT)) error("expected struct")
+        if (peek().type != TokenType.IDENTIFIER) error("expected id")
+        val structName = consume()
+        if (match(TokenType.LeftBrace)) {
+            val fields = parseStructFields()
+            if (!match(TokenType.RightBrace)) error("expected }")
+            return StructItemNode(structName, fields)
+        } else {
+            if (!match(TokenType.Semicolon)) error("expected ;")
+            return StructItemNode(structName, null)
+        }
+    }
+
+    fun parseStructFields(): List<StructField> {
+        if (peek().type == TokenType.RightBrace) return emptyList()
+        val fields = mutableListOf<StructField>()
+        fields.add(parseStructField())
+        while (match(TokenType.Comma)) {
+            if (peek().type == TokenType.RightBrace) break
+            fields.add(parseStructField())
+        }
+        return fields
+    }
+
+    fun parseStructField(): StructField {
+        val name = consume()
+        if (consume().type != TokenType.IDENTIFIER) error("expected id")
+        if (!match(TokenType.Colon)) error("expected :")
+        val type = parseType()
+        return StructField(name, type)
+    }
+
+    fun parseEnumItem(): EnumItemNode {
+        if (!match(TokenType.ENUM)) error("expected enum")
+        val name = consume()
+        if (name.type != TokenType.IDENTIFIER) error("expected id")
+        if (!match(TokenType.LeftBrace)) error("expected {")
+        val variants = parseVariants()
+        if (!match(TokenType.RightBrace)) error("expected }")
+        return EnumItemNode(name, variants)
+    }
+
+    fun parseVariants(): List<Token> {
+        val variants = mutableListOf<Token>()
+        if (peek().type != TokenType.IDENTIFIER) error("expected id")
+        variants.add(consume())
+        while (match(TokenType.Comma)) {
+            if (peek().type == TokenType.RightBrace) break
+            if (peek().type != TokenType.IDENTIFIER) error("expected id")
+            variants.add(consume())
+        }
+        return variants
+    }
+
+    fun parseConstantItem(): ConstantItemNode {
+        if (!match(TokenType.CONST)) error("expected const")
+        if (peek().type != TokenType.IDENTIFIER) error("expected id")
+        val constantName = consume()
+        if (!match(TokenType.Colon)) error("expected :")
+        val constantType = parseType()
+        val value = if (match(TokenType.Eq)) {
+            parseExpr(0)
+        } else {
+            null
+        }
+        if (!match(TokenType.Semicolon)) error("expected ;")
+        return ConstantItemNode(constantName, constantType, value)
+    }
+
+    fun parseTraitItem(): TraitItemNode {
+        if (!match(TokenType.TRAIT)) error("expected trait")
+        if (peek().type != TokenType.IDENTIFIER) error("expected id")
+        val traitName = consume()
+        if (!match(TokenType.LeftBrace)) error("expected {")
+        val items = mutableListOf<ItemNode>()
+        while (peek().type != TokenType.RightBrace) {
+            items.add(parseAssociatedItem())
+        }
+        if (!match(TokenType.RightBrace)) error("expected }")
+        return TraitItemNode(traitName, items)
+    }
+
+    fun parseAssociatedItem(): ItemNode {
+        return when (peek().type) {
+            TokenType.CONST -> parseConstantItem()
+            TokenType.FN -> parseFunctionItem()
+            else -> error("expected associated const or fn")
+        }
+    }
+
+    fun parseImplItem(): ImplItemNode {
+        if (!match(TokenType.IMPL)) error("expected impl")
+        val implName = if (peek().type == TokenType.IDENTIFIER &&
+            ahead(1).type == TokenType.FOR
+        ) {
+            val trait = consume()
+            if (!match(TokenType.FOR)) error("expected for")
+            trait
+        } else null
+        val implType = parseType()
+        val items = mutableListOf<ItemNode>()
+        if (!match(TokenType.LeftBrace)) error("expected {")
+        while (peek().type != TokenType.RightBrace) {
+            items.add(parseAssociatedItem())
+        }
+        if (!match(TokenType.RightBrace)) error("expected }")
+        return ImplItemNode(implName, implType, items)
     }
 }

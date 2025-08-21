@@ -97,6 +97,8 @@ enum class TokenType {
     LeftParen,
     RightParen,
 
+    EOF,
+
     INVALID,
 }
 
