@@ -1,13 +1,14 @@
 import ast.Lexer
+import ast.Parser
 import ast.removeComments
 
 fun main() {
     val input = """
         fn main() {
-            let greeting = "Hello, world!";
-            println!("{}", greeting);
-            let number = 42;
-            
+            let greeting = "Helloworld";
+            print("{}", greeting);
+            let number = 0x_4_2_;
+            let ch = '\0';
             if number > 10 {
                 println!("Number is greater than 10");
             } else {
@@ -27,6 +28,8 @@ fun main() {
     """.trimIndent()
 
     val lexer = Lexer(removeComments(input))
+    val parser = Parser(lexer.getTokens())
+    val ast = parser.parse()
     val tokenList = lexer.getTokens()
     for (item in tokenList) {
         item.printToken()
