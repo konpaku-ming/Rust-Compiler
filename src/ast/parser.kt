@@ -252,7 +252,6 @@ class Parser(private val tokens: List<Token>) {
             TokenType.CONTINUE -> parseContinueExpr(consume())
             TokenType.RETURN -> parseReturnExpr(consume())
             TokenType.Underscore -> parseUnderscoreExpr(consume())
-            TokenType.MATCH -> parseMatchExpr(consume())
 
             else -> error("unexpected prefix token")
         }
@@ -335,10 +334,6 @@ class Parser(private val tokens: List<Token>) {
     }
 
     fun parseType(): TypeNode {
-        return parseTypeNoBounds()
-    }
-
-    fun parseTypeNoBounds(): TypeNoBoundsNode {
         if (peek().type == TokenType.IDENTIFIER ||
             peek().type == TokenType.SELF ||
             peek().type == TokenType.SELF_CAP
@@ -356,11 +351,11 @@ class Parser(private val tokens: List<Token>) {
     fun parseReferenceType(cur: Token): ReferenceTypeNode {
         if (cur.type != TokenType.BitAnd) error("expected &")
         val isMut = match(TokenType.MUT)
-        val tar = parseTypeNoBounds()
+        val tar = parseType()
         return ReferenceTypeNode(isMut, tar)
     }
 
-    fun parseArrayOrSliceType(cur: Token): TypeNoBoundsNode {
+    fun parseArrayOrSliceType(cur: Token): TypeNode {
         if (cur.type != TokenType.LeftBracket) error("expected [")
         val elementType = parseType()
         val next = consume()
@@ -588,7 +583,7 @@ class Parser(private val tokens: List<Token>) {
     fun parseInfixAs(left: ExprNode, cur: Token): TypeCastExprNode {
         // TypeCast
         if (cur.type != TokenType.AS) error("expected as")
-        val targetType = parseTypeNoBounds()
+        val targetType = parseType()
         return TypeCastExprNode(left, targetType)
     }
 
@@ -973,38 +968,6 @@ class Parser(private val tokens: List<Token>) {
     fun parseUnderscoreExpr(cur: Token): UnderscoreExprNode {
         if (cur.type != TokenType.Underscore) error("expected _")
         return UnderscoreExprNode(cur)
-    }
-
-    fun parseMatchArm(): MatchArm {
-        val pattern = parsePattern()
-        val guard = if (match(TokenType.IF)) {
-            parseExpr(0)
-        } else null
-        if (!match(TokenType.FatArrow)) error("expected =>")
-        val expr = parseExpr(0)
-        val isComma = match(TokenType.Comma)
-        return if (expr is ExprWithBlockNode) {
-            MatchArm(pattern, guard, expr)
-        } else {
-            if (peek().type == TokenType.RightBrace) {
-                MatchArm(pattern, guard, expr)// 最后一个
-            } else {
-                if (!isComma) error("expected ,")
-                else MatchArm(pattern, guard, expr)
-            }
-        }
-    }
-
-    fun parseMatchExpr(cur: Token): MatchExprNode {
-        if (cur.type != TokenType.MATCH) error("expected match")
-        val scrutinee = parseExpr(0)
-        if (scrutinee is StructExprNode) error("unexpected scrutinee")
-        if (!match(TokenType.LeftBrace)) error("expected {")
-        val arms = mutableListOf<MatchArm>()
-        while (!match(TokenType.RightBrace)) {
-            arms.add(parseMatchArm())
-        }
-        return MatchExprNode(scrutinee, arms)
     }
 
     fun parseStmt(): StmtNode {

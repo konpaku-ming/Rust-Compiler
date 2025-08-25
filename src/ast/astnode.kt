@@ -14,7 +14,7 @@ enum class NodeType {
     ArrayList, ArrayLength, IndexExpr,
     StructExpr, CallExpr, MethodCallExpr, FieldExpr,
     InfiniteLoopExpr, PredicateLoopExpr, BreakExpr, ContinueExpr, IfExpr,
-    ReturnExpr, UnderscoreExpr, MatchExpr,
+    ReturnExpr, UnderscoreExpr,
     LiteralPattern, IdentifierPattern, WildcardPattern,
     ReferencePattern, PathPattern,
 }
@@ -144,35 +144,33 @@ data class PathInExprNode(
 
 data class TypePathNode(
     val path: PathSegment,
-) : TypeNoBoundsNode() {
+) : TypeNode() {
     override val type: NodeType = NodeType.TypePath
 }
 
 sealed class TypeNode : ASTNode()
 
-sealed class TypeNoBoundsNode : TypeNode()
-
 data class ReferenceTypeNode(
     val isMut: Boolean,
-    val tar: TypeNoBoundsNode
-) : TypeNoBoundsNode() {
+    val tar: TypeNode
+) : TypeNode() {
     override val type: NodeType = NodeType.ReferenceType
 }
 
 data class ArrayTypeNode(
     val elementType: TypeNode,
     val length: ExprNode
-) : TypeNoBoundsNode() {
+) : TypeNode() {
     override val type: NodeType = NodeType.ArrayType
 }
 
 data class SliceTypeNode(
     val elementType: TypeNode
-) : TypeNoBoundsNode() {
+) : TypeNode() {
     override val type: NodeType = NodeType.SliceType
 }
 
-data class InferredTypeNode(val token: Token) : TypeNoBoundsNode() {
+data class InferredTypeNode(val token: Token) : TypeNode() {
     override val type: NodeType = NodeType.InferredType
 }
 
@@ -284,7 +282,7 @@ data class LazyBooleanExprNode(
 
 data class TypeCastExprNode(
     val expr: ExprNode,
-    val targetType: TypeNoBoundsNode
+    val targetType: TypeNode
 ) : OperatorExprNode() {
     override val type: NodeType = NodeType.TypeCastExpr
 }
@@ -422,19 +420,6 @@ data class ReturnExprNode(val value: ExprNode?) : ExprWithoutBlockNode() {
 data class UnderscoreExprNode(val token: Token) : ExprWithoutBlockNode() {
     override val type: NodeType = NodeType.UnderscoreExpr
 }
-
-data class MatchExprNode(
-    val scrutinee: ExprNode,
-    val arms: List<MatchArm>
-) : ExprWithBlockNode() {
-    override val type: NodeType = NodeType.MatchExpr
-}
-
-data class MatchArm(
-    val pattern: PatternNode,
-    val guard: ExprNode?,
-    val expr: ExprNode
-)
 
 sealed class PatternNode : ASTNode()
 
